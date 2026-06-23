@@ -1,0 +1,108 @@
+i did the steps again.
+first i regenerated the dataset to better fit general aot questions.
+then i improved the chunker a bit to be word-based instead of character based - def chunk_text(text, chunk_size=200, overlap=30):
+    words = text.split()
+    chunks = []
+    start = 0
+    n = len(words)
+
+    while start < n:
+        end = min(start + chunk_size, n)
+        chunk = " ".join(words[start:end])
+        chunks.append(chunk)
+        start += chunk_size - overlap   # slide window
+
+    return chunks
+
+then i truncated the table and rerun the pipeline(now i have 37 rows in it)
+
+i fixed the search func -from app.database import conn
+from app.ingest.embedder import embed_text
+
+def retrieve(query, top_k = 5):
+    """
+    Retrieve relevant documents based on the query.
+
+    Args:
+        query (str): The search query.
+        top_k (int): The number of top results to return.
+
+    Returns:
+        list: A list of relevant documents.
+    """
+
+    # SQL query to retrieve the top_k most similar documents based on cosine similarity
+    sql_query = """
+        SELECT content, source, chunk_index, 1 - (embedding <=> %s::vector) AS similarity
+        FROM chunks
+        WHERE 1 - (embedding <=> %s::vector) > 0.4  -- Filter for similarity greater than 0.5
+        ORDER BY embedding <=> %s::vector
+        LIMIT %s;
+    """
+
+    query_embedding = embed_text([query])[0]  # Get the embedding for the query
+    
+    with conn.cursor() as cursor:
+        cursor.execute(sql_query, (query_embedding.tolist(), query_embedding.tolist(), query_embedding.tolist(), top_k))
+        results = cursor.fetchall()
+
+    return results
+
+
+# test the retrieve function
+queries = [
+    "Who is the author of attack on titan?",
+    "What is the main theme of the story of aot?",
+    "Where did humanity live in the story of aot?",
+]
+
+for query in queries:
+    print(f"Query: {query}")
+    results = retrieve(query)
+    for content, source, chunk_index, similarity in results:
+        print(f"Source: {source}, Chunk Index: {chunk_index}, Similarity: {similarity:.4f}")
+        print(f"Content: {content}\n")
+    print("-" * 80)
+
+
+(venv) E:\Naman\rag-project>python -m app.retrieval.search
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████████████| 103/103 [00:00<00:00, 549.80it/s]
+Query: Who is the author of attack on titan?
+Batches: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:02<00:00,  2.51s/it]
+Source: aot_raw_1.txt, Chunk Index: 36, Similarity: 0.6473
+Content: uncertainty about whether cycles of violence can truly be broken, emphasizing the recurring theme of history repeating itself through human conflict. Hajime Isayama has cited influences from real-world history, especially themes of war, isolation, propaganda, and moral ambiguity in conflict. These influences are reflected in the geopolitical structure of the story. The anime adaptation of Attack on Titan became globally popular and significantly increased the series’ reach beyond Japan. It is known for its intense storytelling, dramatic character development, and large-scale action sequences. The series is often noted for shifting its tone over time from a survival horror story focused on Titans to a complex political and philosophical narrative about humanity, war, and identity. Attack on Titan is widely recognized for its unpredictable plot developments, moral ambiguity, and willingness to challenge traditional hero-villain structures in storytelling.
+
+Source: aot_raw_1.txt, Chunk Index: 4, Similarity: 0.5738
+Content: The system of inheritance creates long-standing conflicts over control of these abilities, shaping the course of wars and politics. The Founding Titan is one of the most significant Titan powers, with abilities that can influence other Titans and affect the memories of certain groups of people. However, its full power is not easily accessible and is tied to specific conditions related to inheritance and royal lineage, making it one of the most strategically important abilities in the world. The Attack Titan is known for its aggressive nature and strong combat capabilities. It also has a unique characteristic that allows its users to receive memories from future inheritors, influencing decisions across generations. This creates a complex connection between past and future users that impacts major events in the story. The Armored Titan possesses a body covered in hardened protective armor that makes it highly resistant to physical attacks. It is designed for breaking through defenses and sustaining heavy damage during combat operations. Its defensive strength makes it a key asset in military conflicts involving Titan warfare. The Colossal Titan is characterized by its enormous size and ability to release massive bursts of steam and explosive energy upon transformation. Its sheer scale
+
+Source: aot_raw_1.txt, Chunk Index: 34, Similarity: 0.5599
+Content: transformation energy, which can destroy large areas instantly and significantly alter battle conditions. The Beast Titan is known for its intelligence and ability to throw objects with extreme precision and force. It often serves a strategic role in coordinated Titan warfare. A major turning point occurs when it is revealed that several trusted soldiers, including Reiner Braun, Bertholdt Hoover, and Annie Leonhart, are actually Titan Shifters sent from Marley to infiltrate Paradis Island. This revelation causes a collapse of trust within the military. Reiner Braun experiences severe psychological conflict due to his dual identity as both a Marleyan soldier and someone who lived among the people of Paradis. This internal struggle becomes one of the story’s major character studies. Annie Leonhart, known as the Female Titan, is eventually captured after a confrontation but encases herself in a hardened crystal-like state, preventing interrogation. The discovery of hidden basement records belonging to Eren’s father reveals that humanity exists beyond the walls and that Paradis Island is not the last human civilization. This revelation fundamentally changes the understanding of the world. Outside the walls, the Marleyan Empire dominates global politics and uses Titans as weapons of war. Eldians are subjected to discrimination and
+
+Source: aot_raw_1.txt, Chunk Index: 24, Similarity: 0.5538
+Content: Titan but later reappears as a Titan Shifter. This revelation shocks both allies and enemies, as it confirms that humans can become Titans. Eren’s ability becomes a critical asset but also creates fear and distrust within human leadership. Eren is later integrated into the Survey Corps, where he is used as a strategic weapon against Titans. His presence allows humanity to experiment with Titan-based warfare, though many soldiers remain uncertain about trusting him. The Survey Corps conducts expeditions beyond the walls to gather information and attempt to reclaim territory. These missions reveal that Titans are not the only danger and that the outside world may hold answers about their origin. During exploration missions, the team encounters intelligent Titans such as the Female Titan, who demonstrates tactical intelligence and targeted attacks. This introduces the concept that some Titans are controlled by human intelligence. Armin’s analysis leads to the identification of the Female Titan as Annie Leonhart, a fellow soldier. This reveals that Titan Shifters are hidden within human society, creating paranoia and distrust among soldiers. Annie is eventually captured after a major confrontation inside a city environment. However, she encases herself in a hardened crystal-like shell, preventing interrogation and preserving her
+
+Source: aot_raw_1.txt, Chunk Index: 33, Similarity: 0.5517
+Content: creatures but are connected to human history and a hidden system of power inheritance. This system is tied to a figure known as Ymir Fritz, who is considered the origin of all Titan abilities. The Nine Titans system divides Titan powers into distinct categories, each with unique abilities and strategic roles. These powers are passed down through inheritance and are central to global military conflicts. The Founding Titan has the ability to manipulate memories and influence Titan behavior under certain conditions. Its power is highly restricted by royal blood requirements, making it one of the most politically significant abilities in the world. The Attack Titan is unique because it can receive memories from future inheritors, creating a non-linear connection across time. This trait influences the decisions of its users in ways that appear to transcend normal causality. The Armored Titan possesses hardened skin that provides strong defensive capabilities, making it ideal for frontline assaults and breaking through enemy fortifications. The Colossal Titan is characterized by its enormous size and explosive transformation energy, which can destroy large areas instantly and significantly alter battle conditions. The Beast Titan is known for its intelligence and ability to throw objects with extreme precision and
+
+--------------------------------------------------------------------------------
+Query: What is the main theme of the story of aot?
+Batches: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00, 62.06it/s]
+Source: aot_raw_1.txt, Chunk Index: 35, Similarity: 0.4633
+Content: revelation fundamentally changes the understanding of the world. Outside the walls, the Marleyan Empire dominates global politics and uses Titans as weapons of war. Eldians are subjected to discrimination and are forced into internment zones where they are controlled and militarized. Eren Yeager’s ideology evolves significantly as he learns more about global conflict. His early desire to kill all Titans transforms into a broader belief that extreme actions are necessary to secure freedom for his people. The Rumbling is initiated as a catastrophic event where colossal Titans embedded within the walls are released to march across the world. This results in widespread destruction and represents the extreme outcome of Eren’s ideology. Mikasa Ackerman ultimately plays a decisive role in resolving the final conflict, choosing to stop Eren despite her emotional attachment to him. This decision becomes one of the most emotionally significant moments in the story. Armin Arlert later becomes a key figure in post-conflict diplomacy, representing the possibility of negotiation and rebuilding after large-scale destruction. The story concludes with uncertainty about whether cycles of violence can truly be broken, emphasizing the recurring theme of history repeating itself through human conflict. Hajime Isayama has cited influences from real-world history, especially
+
+Source: aot_raw_1.txt, Chunk Index: 28, Similarity: 0.4073
+Content: eventually activated, releasing colossal Titans from the walls to march across the world. This results in catastrophic destruction on a global scale, fundamentally altering civilization outside Paradis. Mikasa and Armin become key figures in opposing Eren’s final actions. Their emotional conflict centers around stopping someone they deeply care about while understanding his motivations. Armin attempts to negotiate and reason with Eren, but Eren remains committed to his chosen path, believing it is necessary for long-term survival of his people. Mikasa ultimately makes a decisive emotional choice that leads to the end of Eren’s actions, resolving the final conflict between personal attachment and global consequences. After the Rumbling ends, the world is left fundamentally changed, with massive loss of life and a fractured global order. Survivors must confront the consequences of cycles of hatred and retaliation. The story concludes with uncertainty about whether true peace can exist, emphasizing that history continues in cycles unless conscious effort is made to break them. Eren’s journey is ultimately framed as a transformation from a freedom-seeking child to a figure who attempts to redefine freedom through extreme means. His actions remain morally complex and interpreted differently depending on perspective. Mikasa’s role resolves around emotional restraint
+
+--------------------------------------------------------------------------------
+Query: Where did humanity live in the story of aot?
+Batches: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1/1 [00:00<00:00, 22.96it/s]
+Source: aot_raw_1.txt, Chunk Index: 26, Similarity: 0.4220
+Content: power, though he does not fully understand it yet. Historia Reiss is revealed to be part of a hidden royal lineage connected to the true governing history of the walls. This revelation exposes that the public government has been manipulated and that true royal authority has been concealed. A coup occurs within the walls, replacing corrupt leadership with a more transparent governing structure. This shift allows the Survey Corps to operate more freely and pursue truth about Titans without internal political obstruction. Eren, Historia, and other members discover hidden truths about the world through basement records left by Eren’s father. These records reveal that humanity exists beyond the walls and that Paradis Island is not the last human settlement. It is revealed that the world outside is dominated by the Marleyan Empire, which controls Eldian populations and uses Titans as weapons of war. This fundamentally changes the perception of who the real enemy is. Eren’s understanding of freedom evolves as he realizes that Titans are not the root cause of conflict, but rather tools within a larger human political system. His motivations begin shifting toward breaking global cycles of oppression. The story transitions to Marley, where Eldian children are raised
+
+Source: aot_raw_1.txt, Chunk Index: 35, Similarity: 0.4085
+Content: revelation fundamentally changes the understanding of the world. Outside the walls, the Marleyan Empire dominates global politics and uses Titans as weapons of war. Eldians are subjected to discrimination and are forced into internment zones where they are controlled and militarized. Eren Yeager’s ideology evolves significantly as he learns more about global conflict. His early desire to kill all Titans transforms into a broader belief that extreme actions are necessary to secure freedom for his people. The Rumbling is initiated as a catastrophic event where colossal Titans embedded within the walls are released to march across the world. This results in widespread destruction and represents the extreme outcome of Eren’s ideology. Mikasa Ackerman ultimately plays a decisive role in resolving the final conflict, choosing to stop Eren despite her emotional attachment to him. This decision becomes one of the most emotionally significant moments in the story. Armin Arlert later becomes a key figure in post-conflict diplomacy, representing the possibility of negotiation and rebuilding after large-scale destruction. The story concludes with uncertainty about whether cycles of violence can truly be broken, emphasizing the recurring theme of history repeating itself through human conflict. Hajime Isayama has cited influences from real-world history, especially
+
+--------------------------------------------------------------------------------
+
+(venv) E:\Naman\rag-project>
